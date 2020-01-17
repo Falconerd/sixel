@@ -1,0 +1,15 @@
+BasedOnStyle: LLVM
+UseTab: Never
+IndentWidth: 4
+AlwaysBreakAfterReturnType: TopLevel
+ColumnLimit: 72
+UseTab: Always
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  IndentBraces: false
+AlignAfterOpenBracket: AlwaysBreak
+PointerAlignment: Right
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
