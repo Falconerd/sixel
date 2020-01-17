@@ -2,6 +2,8 @@
 
 A simple pixel art tool.
 
+![](https://raw.githubusercontent.com/Falconerd/sixel/master/screenshot.png)
+
 You must edit main.c and recompile to config.
 
 - Palette (edit main.c)
