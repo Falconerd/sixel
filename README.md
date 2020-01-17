@@ -3,6 +3,7 @@
 A simple pixel art tool.
 
 ![](https://raw.githubusercontent.com/Falconerd/sixel/master/screenshot.png)
+![](https://raw.githubusercontent.com/Falconerd/sixel/master/example.png)
 
 You must edit main.c and recompile to config.
 
