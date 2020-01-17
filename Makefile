@@ -1,6 +1,6 @@
 CC := clang
 
-CFLAGS := -I/usr/include/freetype2 -lfreetype -Wall -ldl -lglfw -lc -lm
+CFLAGS := -lglfw -lm -ldl
 
 STD := c89
 OUT_DIR := ./dist

@@ -2,7 +2,7 @@ BasedOnStyle: LLVM
 UseTab: Never
 IndentWidth: 4
 AlwaysBreakAfterReturnType: TopLevel
-ColumnLimit: 72
+ColumnLimit: 80
 UseTab: Always
 BreakBeforeBraces: Custom
 BraceWrapping:

@@ -8,26 +8,48 @@
 #include <GLFW/glfw3.h>
 /* clang-format on */
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #include "shader.h"
 #include "math_linear.h"
 
-int WIDTH = 512;
-int HEIGHT = 512;
-unsigned char canvas_data[512][512][3];
+/* CONFIGURATION BEGIN */
+/* if you change from .png, it will still be a png */
+char *FILE_NAME = "test.png";
+int WINDOW_WIDTH = 512;
+int WINDOW_HEIGHT = 512;
 
-int palette[] = {
-    0xffffff, 0x000000, 0xff6666, 0xaaaa00
+/* canvas size */
+int WIDTH = 24;
+int HEIGHT = 16;
+/*                        h   w */
+unsigned char canvas_data[16][24][4];
+
+unsigned char palette_index = 0;
+unsigned char palette_count = 8;
+unsigned char palette[][8] = {
+    {43, 15, 84, 255},
+    {171, 31, 101, 255},
+    {255, 79, 105, 255},
+    {255, 247, 248, 255},
+    {255, 129, 66, 255},
+    {255, 218, 69, 255},
+    {51, 104, 220, 255},
+    {73, 231, 236, 255},
 };
 
-int PALETTE_WIDTH = 8 * 4;
-int PALETTE_HEIGHT = 8;
-unsigned char palette_data[4][3];
+/* CONFIGURATION END */
 
-unsigned char zoom_level = 4;
-unsigned char zoom_multiplier = 1;
-float zoom = 1.0f;
+unsigned char zoom_level = 0;
+unsigned char zoom[6] = {1, 2, 4, 8, 16, 32};
 
 unsigned char pan_mode = 0;
+signed char draw_mode = 1;
+unsigned char *draw_color;
+unsigned char should_save = 0;
+
+GLfloat viewport[4];
 
 /* clang-format off */
 GLfloat vertices[] = {
@@ -36,81 +58,12 @@ GLfloat vertices[] = {
     -1.0f, -1.0f,  0.0f,  1.0f, 1.0f, 1.0f,  0.0f, 1.0f,
     -1.0f,  1.0f,  0.0f,  1.0f, 1.0f, 1.0f,  0.0f, 0.0f
 };
-
-GLfloat palette_vertices[] = {
-     1.0f,  1.0f,
-     1.0f, -1.0f,
-    -1.0f, -1.0f,
-    -1.0f,  1.0f 
-};
 /* clang-format on */
 GLuint indices[] = {0, 1, 3, 1, 2, 3};
 
-GLfloat tex_coord_offset[2] = { 0.0f, 0.0f };
-
 double cursor_pos[2];
 double cursor_pos_last[2];
-
-void
-hex_to_rgb(int *hex, char *rgb)
-{
-    rgb[0] = (*hex >> 16) & 0xff;
-    rgb[1] = (*hex >> 8) & 0xff;
-    rgb[2] = (*hex >> 0) & 0xff;
-}
-
-void
-adjust_zoom(int increase)
-{
-    if (increase > 0) {
-        if (zoom_level < 5)
-            zoom_level++;
-        else
-            puts("zoom maxed");
-    } else {
-        if (zoom_level > 0)
-            zoom_level--;
-        else
-          puts("zoom at actual size");
-    }
-
-    switch (zoom_level) {
-    case 0:
-        zoom = 1.0f;
-        tex_coord_offset[0] = 0.0f;
-        tex_coord_offset[1] = 0.0f;
-        zoom_multiplier = 1;
-        break;
-    case 1:
-        zoom = 0.5f;
-        tex_coord_offset[0] = 0.25f;
-        tex_coord_offset[1] = 0.25f;
-        zoom_multiplier = 2;
-        break;
-    case 2:
-        zoom = 0.25f;
-        tex_coord_offset[0] = 0.375f;
-        tex_coord_offset[1] = 0.375f;
-        zoom_multiplier = 4;
-        break;
-    case 3:
-        zoom = 0.125f;
-        tex_coord_offset[0] = 0.4375f;
-        tex_coord_offset[1] = 0.4375f;
-        zoom_multiplier = 8;
-        break;
-    case 4:
-        zoom = 0.0625f;
-        tex_coord_offset[0] = 0.4685f;
-        tex_coord_offset[1] = 0.4685f;
-        zoom_multiplier = 16;
-    case 5:
-        zoom = 0.03125f;
-        tex_coord_offset[0] = 0.48525f;
-        tex_coord_offset[1] = 0.48525f;
-        zoom_multiplier = 32;
-    }
-}
+double cursor_pos_relative[2];
 
 void
 framebuffer_size_callback(GLFWwindow *, int, int);
@@ -127,11 +80,21 @@ mouse_button_callback(GLFWwindow *, int, int, int);
 void
 scroll_callback(GLFWwindow *, double, double);
 
+void
+key_callback(GLFWwindow *, int, int, int, int);
+
+void
+viewport_set();
+
+void
+adjust_zoom(int);
+
 int
 main(int argc, char **argv)
 {
     GLFWwindow *window;
-    /* GLFWcursor *cursor; */
+
+    draw_color = palette[palette_index];
 
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -140,7 +103,8 @@ main(int argc, char **argv)
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_CENTER_CURSOR, GLFW_TRUE);
 
-    window = glfwCreateWindow(WIDTH, HEIGHT, "pixel-tool", NULL, NULL);
+    window =
+        glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "pixel-tool", NULL, NULL);
 
     if (!window)
         puts("Failed to create GLFW window");
@@ -150,18 +114,21 @@ main(int argc, char **argv)
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
         puts("Failed to init GLAD");
 
-    glViewport(0, 0, WIDTH, HEIGHT);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    viewport[0] = WINDOW_WIDTH / 2 - WIDTH * zoom[zoom_level] / 2;
+    viewport[1] = WINDOW_HEIGHT / 2 - HEIGHT * zoom[zoom_level] / 2;
+    viewport[2] = WIDTH * zoom[zoom_level];
+    viewport[3] = HEIGHT * zoom[zoom_level];
+
+    viewport_set();
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetScrollCallback(window, scroll_callback);
+    glfwSetKeyCallback(window, key_callback);
 
-    /* cursor = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR); */
-    /* glfwSetCursor(window, cursor); */
-
-    adjust_zoom(1);
-
-    /* ? */
     GLuint shader_program =
         create_shader_program("shader.vs", "shader.fs", NULL);
 
@@ -175,47 +142,57 @@ main(int argc, char **argv)
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    glBufferData(
+        GL_ELEMENT_ARRAY_BUFFER,
+        sizeof(indices),
+        indices,
+        GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
+    glVertexAttribPointer(
+        0,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        8 * sizeof(float),
+        (void *)0);
     glEnableVertexAttribArray(0);
 
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
+    glVertexAttribPointer(
+        1,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        8 * sizeof(float),
+        (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
+    glVertexAttribPointer(
+        2,
+        2,
+        GL_FLOAT,
+        GL_FALSE,
+        8 * sizeof(float),
+        (void *)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
     GLuint texture;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, canvas_data);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    unsigned int palette_shader_program = create_shader_program("palette.vs", "palette.fs", NULL);
-
-    unsigned int palette_vbo, palette_vao, palette_ebo;
-    glGenBuffers(1, &palette_vbo);
-    glGenBuffers(1, &palette_ebo);
-    glGenVertexArrays(1, &palette_vao);
-
-    glBindVertexArray(palette_vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, palette_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(palette_vertices), palette_vertices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(0);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA,
+        WIDTH,
+        HEIGHT,
+        0,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        canvas_data);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -224,38 +201,50 @@ main(int argc, char **argv)
         glfwPollEvents();
         process_input(window);
 
-        glClearColor(0.0, 0.0, 0.2, 1.0);
+        glClearColor(0.075, 0.075, 0.1, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
-
-        GLuint zoom_location = glGetUniformLocation(shader_program, "zoom");
-        glUniform1f(zoom_location, zoom);
-
-        GLuint offset_location = glGetUniformLocation(shader_program, "offset");
-        glUniform2f(offset_location, tex_coord_offset[0], tex_coord_offset[1]);
-
-        glBindTexture(GL_TEXTURE_2D, texture);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, canvas_data);
 
         glUseProgram(shader_program);
         glBindVertexArray(vao);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        GLuint alpha_loc = glGetUniformLocation(shader_program, "alpha");
+        glUniform1f(alpha_loc, 0.2f);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-        GLuint palette_scale_location =
-            glGetUniformLocation(palette_shader_program, "scale");
-        glUniform1f(palette_scale_location, 0.1f);
+        glUniform1f(alpha_loc, 1.0f);
+        glBindTexture(GL_TEXTURE_2D, texture);
 
-        GLuint palette_offset_location =
-            glGetUniformLocation(palette_shader_program, "offset");
-        glUniform2f(palette_offset_location, 0, 0);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA,
+            WIDTH,
+            HEIGHT,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            canvas_data);
 
-        GLuint palette_color_location =
-            glGetUniformLocation(palette_shader_program, "color");
-        glUniform3f(palette_color_location, 1.0f, 0.0f, 0.0f);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-        /* glUseProgram(palette_shader_program); */
-        /* glBindVertexArray(palette_vao); */
-        /* glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); */
+        if (should_save > 0) {
+            unsigned char *data = (unsigned char *)malloc(
+                WIDTH * HEIGHT * 4 * sizeof(unsigned char));
+
+            printf(
+                "allocated %lu. stride: %lu\n",
+                WIDTH * HEIGHT * 4 * sizeof(unsigned char),
+                sizeof(unsigned char) * 4);
+
+            /* glPixelStorei(GL_UNPACK_ALIGNMENT, 1); */
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+            stbi_write_png(FILE_NAME, WIDTH, HEIGHT, 4, data, 0);
+
+            free(data);
+            should_save = 0;
+        }
 
         glfwSwapBuffers(window);
     }
@@ -275,107 +264,60 @@ framebuffer_size_callback(GLFWwindow *window, int w, int h)
 void
 process_input(GLFWwindow *window)
 {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-
+    int x, y;
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS) {
+        x = (int)(cursor_pos_relative[0] / zoom[zoom_level]);
+        y = (int)(cursor_pos_relative[1] / zoom[zoom_level]);
 
-        /* tex_coord_offset[0]&1 */
-        printf("cursor_pos: %f %f\n", cursor_pos[0], cursor_pos[1]);
-
-        /* get percentage */
-        float px = cursor_pos[0] / WIDTH;
-        float py = cursor_pos[1] / HEIGHT;
-
-        printf("px,py: %f %f\n", px, py);
-
-        /* actual dimensions */
-        float w = WIDTH / zoom_multiplier;
-        float h = HEIGHT / zoom_multiplier;
-
-        printf("w,h: %f %f\n", w, h);
-
-        /* find pixel which is % across screen...? */
-        /* find top left pixel value... */
-        float x0 = WIDTH * tex_coord_offset[0];
-        float y0 = HEIGHT * tex_coord_offset[1];
-
-        printf("x0,y0: %f %f\n", x0, x0);
-
-        /* bottom right value */
-        float x1 = x0 + w;
-        float y1 = y0 + h;
-
-        printf("x1,y1: %f %f\n", x1, y1);
-	/*
-	  for example we have zoomed into max and have a 64x64
-	  square (512x512 canvas).
-
-	  224,224
-	  |--------------|
-	  |              |
-	  |              |
-	  |              |
-	  |              |
-	  |              |
-	  |--------------|288,288
-
-	  any pixels drawn anywhere between 0,7 and 7,7 will need to be
-	  placed at 224,224
-	  any pixels drawn between 504,504 and 511,511 will need to be
-	  placed at 228,228
-         */
-
-        int x = (int)(x0 + cursor_pos[0] / zoom_multiplier);
-        int y = (int)(y0 + cursor_pos[1] / zoom_multiplier);
-
-        printf("x,y: %d %d\n", x, y);
-
-        if (x > x0 && x < x1 && y > y0 && y < y1) {
-            canvas_data[y][x][0] = 255;
-            canvas_data[y][x][1] = 255;
-            canvas_data[y][x][2] = 255;
+        if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+            if (draw_mode > 0) {
+                canvas_data[y][x][0] = draw_color[0];
+                canvas_data[y][x][1] = draw_color[1];
+                canvas_data[y][x][2] = draw_color[2];
+                canvas_data[y][x][3] = draw_color[3];
+            } else {
+                canvas_data[y][x][0] = 0;
+                canvas_data[y][x][1] = 0;
+                canvas_data[y][x][2] = 0;
+                canvas_data[y][x][3] = 0;
+            }
         }
     }
 
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-        tex_coord_offset[0] -= 1.0f / WIDTH;
-    }
-    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-        tex_coord_offset[0] += 1.0f / WIDTH;
-    }
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-        tex_coord_offset[1] += 1.0f / HEIGHT;
-    }
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-        tex_coord_offset[1] -= 1.0f / HEIGHT;
-    }
-
-    /* printf("%f %f\n", tex_coord_offset[0], tex_coord_offset[1]); */
-
     pan_mode = 0;
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS) {
-      pan_mode = 1;
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS &&
+        (x < 0 || x > WIDTH) && (y < 0 || y > HEIGHT)) {
+        pan_mode = 1;
     }
 }
 
 void
 mouse_callback(GLFWwindow *window, double x, double y)
 {
-    if (pan_mode > 0) {
-      tex_coord_offset[0] += (cursor_pos_last[0] - cursor_pos[0]) * zoom / WIDTH;
-      tex_coord_offset[1] += (cursor_pos_last[1] - cursor_pos[1]) * zoom / HEIGHT;
+    /* infitesimally small chance aside from startup */
+    if (cursor_pos_last[0] != 0 && cursor_pos_last[1] != 0) {
+        if (pan_mode > 0) {
+            float xmov = (cursor_pos_last[0] - cursor_pos[0]);
+            float ymov = (cursor_pos_last[1] - cursor_pos[1]);
+            viewport[0] -= xmov;
+            viewport[1] += ymov;
+            viewport_set();
+        }
     }
 
     cursor_pos_last[0] = cursor_pos[0];
     cursor_pos_last[1] = cursor_pos[1];
     cursor_pos[0] = x;
     cursor_pos[1] = y;
+    cursor_pos_relative[0] = x - viewport[0];
+    cursor_pos_relative[1] = (y + viewport[1]) - (WINDOW_HEIGHT - viewport[3]);
 }
 
 void
-mouse_button_callback(GLFWwindow *window, int a, int b, int c)
+mouse_button_callback(GLFWwindow *window, int button, int down, int c)
 {
+    if (button == GLFW_MOUSE_BUTTON_3 && down == GLFW_TRUE)
+        draw_mode = -draw_mode;
 }
 
 void
@@ -385,4 +327,91 @@ scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
         adjust_zoom(1);
     else
         adjust_zoom(0);
+}
+
+void
+key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+    if (key == GLFW_KEY_J && action == GLFW_PRESS) {
+        if (palette_index > 0)
+            palette_index--;
+    }
+
+    if (key == GLFW_KEY_K && action == GLFW_PRESS)
+        if (palette_index < palette_count - 1)
+            palette_index++;
+
+    if (key == GLFW_KEY_1 && action == GLFW_PRESS)
+        if (palette_count >= 1)
+            palette_index = 0;
+
+    if (key == GLFW_KEY_2 && action == GLFW_PRESS)
+        if (palette_count >= 2)
+            palette_index = 1;
+
+    if (key == GLFW_KEY_3 && action == GLFW_PRESS)
+        if (palette_count >= 3)
+            palette_index = 2;
+
+    if (key == GLFW_KEY_4 && action == GLFW_PRESS)
+        if (palette_count >= 4)
+            palette_index = 3;
+
+    if (key == GLFW_KEY_5 && action == GLFW_PRESS)
+        if (palette_count >= 5)
+            palette_index = 4;
+
+    if (key == GLFW_KEY_6 && action == GLFW_PRESS)
+        if (palette_count >= 6)
+            palette_index = 5;
+
+    if (key == GLFW_KEY_7 && action == GLFW_PRESS)
+        if (palette_count >= 7)
+            palette_index = 6;
+
+    if (key == GLFW_KEY_8 && action == GLFW_PRESS)
+        if (palette_count >= 8)
+            palette_index = 7;
+
+    if (key == GLFW_KEY_9 && action == GLFW_PRESS)
+        if (palette_count >= 9)
+            palette_index = 8;
+
+    if (key == GLFW_KEY_0 && action == GLFW_PRESS)
+        if (palette_count >= 0)
+            draw_mode = -1;
+
+    draw_color = palette[palette_index];
+
+    if (key == GLFW_KEY_S && action == GLFW_PRESS) {
+        should_save = 1;
+    }
+}
+
+void
+viewport_set()
+{
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+}
+
+void
+adjust_zoom(int increase)
+{
+    if (increase > 0) {
+        if (zoom_level < 5)
+            zoom_level++;
+    } else {
+        if (zoom_level > 0)
+            zoom_level--;
+    }
+
+    viewport[0] = WINDOW_WIDTH / 2 - WIDTH * zoom[zoom_level] / 2;
+    viewport[1] = WINDOW_HEIGHT / 2 - HEIGHT * zoom[zoom_level] / 2;
+    viewport[2] = WIDTH * zoom[zoom_level];
+    viewport[3] = HEIGHT * zoom[zoom_level];
+
+    viewport_set();
 }

@@ -6,9 +6,9 @@ in vec2 out_tex_coords;
 
 uniform sampler2D a_texture;
 uniform vec2 offset;
-uniform float zoom;
+uniform float alpha;
 
 void main()
 {
-    frag_color = texture(a_texture, out_tex_coords * zoom + offset);
+    frag_color = vec4(out_color, alpha) * texture(a_texture, out_tex_coords + offset);
 }
