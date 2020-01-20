@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 /* clang-format off */
 #include <glad/glad.h>
@@ -17,18 +18,15 @@
 /* CONFIGURATION BEGIN */
 /* if you change from .png, it will still be a png */
 char *FILE_NAME = "test.png";
-int WINDOW_WIDTH = 512;
-int WINDOW_HEIGHT = 512;
+int WINDOW_DIMS[2];
+int DIMS[2];
 
-/* canvas size */
-int WIDTH = 24;
-int HEIGHT = 16;
-/*                        h   w */
-unsigned char canvas_data[16][24][4];
+unsigned char *canvas_data;
 
-unsigned char palette_index = 0;
+unsigned char palette_index = 1;
 unsigned char palette_count = 8;
-unsigned char palette[][8] = {
+unsigned char palette[][4] = {
+    {0, 0, 0, 0}, /* Clear Colour */
     {43, 15, 84, 255},
     {171, 31, 101, 255},
     {255, 79, 105, 255},
@@ -41,12 +39,19 @@ unsigned char palette[][8] = {
 
 /* CONFIGURATION END */
 
+enum mode {
+    DRAW,
+    PAN,
+    FILL
+};
+
 unsigned char zoom_level = 0;
 unsigned char zoom[6] = {1, 2, 4, 8, 16, 32};
 
-unsigned char pan_mode = 0;
-signed char draw_mode = 1;
-unsigned char *draw_color;
+enum mode mode = DRAW;
+enum mode last_mode = DRAW;
+unsigned char *draw_colour;
+unsigned char erase[4] = { 0, 0, 0, 0 };
 unsigned char should_save = 0;
 
 GLfloat viewport[4];
@@ -90,11 +95,43 @@ void
 adjust_zoom(int);
 
 int
+string_to_int(int *out, char *s);
+
+int
+colour_equal(unsigned char*, unsigned char*);
+
+void
+fill(int x, int y, unsigned char *old_colour);
+
+int
 main(int argc, char **argv)
 {
-    GLFWwindow *window;
+    WINDOW_DIMS[0] = 512;
+    WINDOW_DIMS[1] = 512;
 
-    draw_color = palette[palette_index];
+    DIMS[0] = 16;
+    DIMS[1] = 16;
+    
+    unsigned char i;
+    for (i = 1; i < argc; i++) {
+        printf("%s\n", argv[i]);
+        if (strcmp(argv[i], "-d") == 0) {
+            int w, h;
+            string_to_int(&w, argv[i+1]);
+            string_to_int(&h, argv[i+2]);
+            printf("%d %d\n", w, h);
+            DIMS[0] = w;
+            DIMS[1] = h;
+            i += 2;
+        }
+    }
+
+    canvas_data = (unsigned char*)malloc(DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char));
+
+    GLFWwindow *window;
+    GLFWcursor* cursor = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
+
+    draw_colour = palette[palette_index];
 
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -104,7 +141,7 @@ main(int argc, char **argv)
     glfwWindowHint(GLFW_CENTER_CURSOR, GLFW_TRUE);
 
     window =
-        glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "pixel-tool", NULL, NULL);
+        glfwCreateWindow(WINDOW_DIMS[0], WINDOW_DIMS[1], "pixel-tool", NULL, NULL);
 
     if (!window)
         puts("Failed to create GLFW window");
@@ -114,13 +151,14 @@ main(int argc, char **argv)
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
         puts("Failed to init GLAD");
 
+    glfwSetCursor(window, cursor);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    viewport[0] = WINDOW_WIDTH / 2 - WIDTH * zoom[zoom_level] / 2;
-    viewport[1] = WINDOW_HEIGHT / 2 - HEIGHT * zoom[zoom_level] / 2;
-    viewport[2] = WIDTH * zoom[zoom_level];
-    viewport[3] = HEIGHT * zoom[zoom_level];
+    viewport[0] = WINDOW_DIMS[0] / 2 - DIMS[0] * zoom[zoom_level] / 2;
+    viewport[1] = WINDOW_DIMS[1] / 2 - DIMS[1] * zoom[zoom_level] / 2;
+    viewport[2] = DIMS[0] * zoom[zoom_level];
+    viewport[3] = DIMS[1] * zoom[zoom_level];
 
     viewport_set();
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
@@ -187,8 +225,8 @@ main(int argc, char **argv)
         GL_TEXTURE_2D,
         0,
         GL_RGBA,
-        WIDTH,
-        HEIGHT,
+        DIMS[0],
+        DIMS[1],
         0,
         GL_RGBA,
         GL_UNSIGNED_BYTE,
@@ -220,8 +258,8 @@ main(int argc, char **argv)
             GL_TEXTURE_2D,
             0,
             GL_RGBA,
-            WIDTH,
-            HEIGHT,
+            DIMS[0],
+            DIMS[1],
             0,
             GL_RGBA,
             GL_UNSIGNED_BYTE,
@@ -231,16 +269,16 @@ main(int argc, char **argv)
 
         if (should_save > 0) {
             unsigned char *data = (unsigned char *)malloc(
-                WIDTH * HEIGHT * 4 * sizeof(unsigned char));
+                DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char));
 
             printf(
                 "allocated %lu. stride: %lu\n",
-                WIDTH * HEIGHT * 4 * sizeof(unsigned char),
+                DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char),
                 sizeof(unsigned char) * 4);
 
             /* glPixelStorei(GL_UNPACK_ALIGNMENT, 1); */
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-            stbi_write_png(FILE_NAME, WIDTH, HEIGHT, 4, data, 0);
+            stbi_write_png(FILE_NAME, DIMS[0], DIMS[1], 4, data, 0);
 
             free(data);
             should_save = 0;
@@ -269,34 +307,42 @@ process_input(GLFWwindow *window)
         x = (int)(cursor_pos_relative[0] / zoom[zoom_level]);
         y = (int)(cursor_pos_relative[1] / zoom[zoom_level]);
 
-        if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
-            if (draw_mode > 0) {
-                canvas_data[y][x][0] = draw_color[0];
-                canvas_data[y][x][1] = draw_color[1];
-                canvas_data[y][x][2] = draw_color[2];
-                canvas_data[y][x][3] = draw_color[3];
-            } else {
-                canvas_data[y][x][0] = 0;
-                canvas_data[y][x][1] = 0;
-                canvas_data[y][x][2] = 0;
-                canvas_data[y][x][3] = 0;
+        if (x >= 0 && x < DIMS[0] && y >= 0 && y < DIMS[1]) {
+            unsigned char *ptr = canvas_data;
+            ptr += (y * DIMS[0] + x) * 4;
+
+            switch (mode) {
+            case DRAW:
+                *ptr = draw_colour[0];
+                *(ptr + 1) = draw_colour[1];
+                *(ptr + 2) = draw_colour[2];
+                *(ptr + 3) = draw_colour[3];
+                break;
+            case PAN:
+                break;
+            case FILL:
+                {
+                unsigned char colour[4] = {*(ptr + 0),
+                                           *(ptr + 1),
+                                           *(ptr + 2),
+                                           *(ptr + 3)};
+
+                fill(x, y, colour);
+
+                break;
+                }
             }
         }
     }
-
-    pan_mode = 0;
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS &&
-        (x < 0 || x > WIDTH) && (y < 0 || y > HEIGHT)) {
-        pan_mode = 1;
-    }
 }
+
 
 void
 mouse_callback(GLFWwindow *window, double x, double y)
 {
     /* infitesimally small chance aside from startup */
     if (cursor_pos_last[0] != 0 && cursor_pos_last[1] != 0) {
-        if (pan_mode > 0) {
+        if (mode == PAN) {
             float xmov = (cursor_pos_last[0] - cursor_pos[0]);
             float ymov = (cursor_pos_last[1] - cursor_pos[1]);
             viewport[0] -= xmov;
@@ -310,14 +356,16 @@ mouse_callback(GLFWwindow *window, double x, double y)
     cursor_pos[0] = x;
     cursor_pos[1] = y;
     cursor_pos_relative[0] = x - viewport[0];
-    cursor_pos_relative[1] = (y + viewport[1]) - (WINDOW_HEIGHT - viewport[3]);
+    cursor_pos_relative[1] = (y + viewport[1]) - (WINDOW_DIMS[1] - viewport[3]);
 }
 
 void
 mouse_button_callback(GLFWwindow *window, int button, int down, int c)
 {
-    if (button == GLFW_MOUSE_BUTTON_3 && down == GLFW_TRUE)
-        draw_mode = -draw_mode;
+
+    /* if (button == GLFW_MOUSE_BUTTON_3 && down == GLFW_TRUE) */
+    /*     draw_mode = -draw_mode; */
+
 }
 
 void
@@ -336,7 +384,7 @@ key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 
     if (key == GLFW_KEY_J && action == GLFW_PRESS) {
-        if (palette_index > 0)
+        if (palette_index > 1)
             palette_index--;
     }
 
@@ -346,45 +394,60 @@ key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 
     if (key == GLFW_KEY_1 && action == GLFW_PRESS)
         if (palette_count >= 1)
-            palette_index = 0;
+            palette_index = 1;
 
     if (key == GLFW_KEY_2 && action == GLFW_PRESS)
         if (palette_count >= 2)
-            palette_index = 1;
+            palette_index = 2;
 
     if (key == GLFW_KEY_3 && action == GLFW_PRESS)
         if (palette_count >= 3)
-            palette_index = 2;
+            palette_index = 3;
 
     if (key == GLFW_KEY_4 && action == GLFW_PRESS)
         if (palette_count >= 4)
-            palette_index = 3;
+            palette_index = 4;
 
     if (key == GLFW_KEY_5 && action == GLFW_PRESS)
         if (palette_count >= 5)
-            palette_index = 4;
+            palette_index = 5;
 
     if (key == GLFW_KEY_6 && action == GLFW_PRESS)
         if (palette_count >= 6)
-            palette_index = 5;
+            palette_index = 6;
 
     if (key == GLFW_KEY_7 && action == GLFW_PRESS)
         if (palette_count >= 7)
-            palette_index = 6;
+            palette_index = 7;
 
     if (key == GLFW_KEY_8 && action == GLFW_PRESS)
         if (palette_count >= 8)
-            palette_index = 7;
+            palette_index = 8;
 
     if (key == GLFW_KEY_9 && action == GLFW_PRESS)
         if (palette_count >= 9)
-            palette_index = 8;
+            palette_index = 9;
 
-    if (key == GLFW_KEY_0 && action == GLFW_PRESS)
-        if (palette_count >= 0)
-            draw_mode = -1;
+    if (key == GLFW_KEY_F && action == GLFW_PRESS)
+        mode = FILL;
 
-    draw_color = palette[palette_index];
+    if (key == GLFW_KEY_B && action == GLFW_PRESS)
+        mode = DRAW;
+
+    if (key == GLFW_KEY_SPACE) {
+        if (action == GLFW_PRESS) {
+            last_mode = mode;
+            mode = PAN;
+        } else if (action == GLFW_RELEASE) {
+            mode = last_mode;
+        }
+    }
+
+    if ((key == GLFW_KEY_0 || key == GLFW_KEY_E) && action == GLFW_PRESS) {
+      palette_index = 0;
+    }
+
+    draw_colour = palette[palette_index];
 
     if (key == GLFW_KEY_S && action == GLFW_PRESS) {
         should_save = 1;
@@ -408,10 +471,71 @@ adjust_zoom(int increase)
             zoom_level--;
     }
 
-    viewport[0] = WINDOW_WIDTH / 2 - WIDTH * zoom[zoom_level] / 2;
-    viewport[1] = WINDOW_HEIGHT / 2 - HEIGHT * zoom[zoom_level] / 2;
-    viewport[2] = WIDTH * zoom[zoom_level];
-    viewport[3] = HEIGHT * zoom[zoom_level];
+    viewport[0] = WINDOW_DIMS[0] / 2 - DIMS[0] * zoom[zoom_level] / 2;
+    viewport[1] = WINDOW_DIMS[1] / 2 - DIMS[1] * zoom[zoom_level] / 2;
+    viewport[2] = DIMS[0] * zoom[zoom_level];
+    viewport[3] = DIMS[1] * zoom[zoom_level];
 
     viewport_set();
+}
+
+int
+string_to_int(int *out, char *s) {
+    char *end;
+    if (s[0] == '\0')
+        return -1;
+    long l = strtol(s, &end, 10);
+    if (l > INT_MAX)
+        return -2;
+    if (l < INT_MIN)
+        return -3;
+    if (*end != '\0')
+        return -1;
+    *out = l;
+    return 0;
+}
+
+int
+colour_equal(unsigned char* a, unsigned char* b)
+{
+  printf("Checking colours: %d %d %d %d vs %d %d %d %d\n",
+         *a, *(a+1), *(a+2), *(a+3),
+         *b, *(b+1), *(b+2), *(b+3));
+  if (
+      *(a+0) == *(b+0) &&
+      *(a+1) == *(b+1) &&
+      *(a+2) == *(b+2) &&
+      *(a+3) == *(b+3)) {
+    return 1;
+  }
+  return 0;
+}
+
+unsigned char*
+get_pixel(int x, int y)
+{
+    return canvas_data + ((y * DIMS[0] + x) * 4);   
+}
+
+void
+fill(int x, int y, unsigned char *old_colour)
+{
+    unsigned char *ptr = get_pixel(x, y);
+    if (colour_equal(ptr, old_colour))
+    {
+        *ptr = draw_colour[0];
+        *(ptr + 1) = draw_colour[1];
+        *(ptr + 2) = draw_colour[2];
+        *(ptr + 3) = draw_colour[3];
+        printf(">%d %d\n", x, y);
+
+        if (x != 0 && !colour_equal(get_pixel(x - 1, y), draw_colour))
+          fill(x - 1, y, old_colour);
+        if (x != DIMS[0] - 1 && !colour_equal(get_pixel(x + 1, y), draw_colour))
+          fill(x + 1, y, old_colour);
+        if (y != DIMS[1] - 1 && !colour_equal(get_pixel(x, y + 1), draw_colour))
+          fill(x, y + 1, old_colour);
+        if (y != 0 && !colour_equal(get_pixel(x, y - 1), draw_colour))
+          fill(x, y - 1, old_colour);
+    }
 }
