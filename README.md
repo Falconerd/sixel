@@ -11,7 +11,7 @@ A simple pixel art tool.
 |--------|-------------|---------|----------|
 | `-d width height` | Width and Height of the Image | `-d 24 16` | `16 16` |
 | `-w width height` | Width and Height of the Window | `-w 800 600` | `512 512` |
-| `-p colours...` | Adds up to 127 hex colours to the palette. Accepts alpha value as the last two characters. | `-p ff0000ff 00ff00ff 0000ffff` | [https://www.lexaloffle.com/pico-8.php](Pico8) |
+| `-p colours...` | Adds up to 127 hex colours to the palette. Accepts alpha value as the last two characters. | `-p ff0000ff 00ff00ff 0000ffff` | [Pico-8](https://www.lexaloffle.com/pico-8.php) |
 | `-o path` | Save to this file path | `-o example.png` | `test.png` |
 
 ## Controls
