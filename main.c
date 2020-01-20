@@ -117,6 +117,11 @@ main(int argc, char **argv)
             i += 2;
         }
 
+        if (strcmp(argv[i], "-o") == 0) {
+            FILE_NAME = argv[i+1];
+            i++;
+        }
+
         if (strcmp(argv[i], "-w") == 0) {
             int w, h;
             string_to_int(&w, argv[i+1]);
