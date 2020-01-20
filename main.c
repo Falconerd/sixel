@@ -15,35 +15,35 @@
 #include "shader.h"
 #include "math_linear.h"
 
-/* CONFIGURATION BEGIN */
-/* if you change from .png, it will still be a png */
 char *FILE_NAME = "test.png";
-int WINDOW_DIMS[2];
-int DIMS[2];
+int WINDOW_DIMS[2] = { 512, 512 };
+int DIMS[2] = { 16, 16 };
 
 unsigned char *canvas_data;
 
 unsigned char palette_index = 1;
-unsigned char palette_count = 8;
-unsigned char palette[][4] = {
-    {0, 0, 0, 0}, /* Clear Colour */
-    {43, 15, 84, 255},
-    {171, 31, 101, 255},
-    {255, 79, 105, 255},
-    {255, 247, 248, 255},
-    {255, 129, 66, 255},
-    {255, 218, 69, 255},
-    {51, 104, 220, 255},
-    {73, 231, 236, 255},
+unsigned char palette_count = 16;
+unsigned char palette[128][4] = {
+    {0, 0, 0, 0},
+    {0, 0, 0, 255},
+    {29, 43, 83, 255},
+    {126, 37, 83, 255},
+    {0, 135, 81, 255},
+    {171, 82, 54, 255},
+    {95, 87, 79, 255},
+    {194, 195, 199, 255},
+    {255, 241, 232, 255},
+    {255, 0, 77, 255},
+    {255, 163, 0, 255},
+    {255, 236, 39, 255},
+    {0, 228, 54, 255},
+    {41, 173, 255, 255},
+    {131, 118, 156, 255},
+    {255, 119, 168, 255},
+    {255, 204, 170, 255}
 };
 
-/* CONFIGURATION END */
-
-enum mode {
-    DRAW,
-    PAN,
-    FILL
-};
+enum mode { DRAW, PAN, FILL };
 
 unsigned char zoom_level = 0;
 unsigned char zoom[6] = {1, 2, 4, 8, 16, 32};
@@ -106,24 +106,60 @@ fill(int x, int y, unsigned char *old_colour);
 int
 main(int argc, char **argv)
 {
-    WINDOW_DIMS[0] = 512;
-    WINDOW_DIMS[1] = 512;
-
-    DIMS[0] = 16;
-    DIMS[1] = 16;
-    
     unsigned char i;
     for (i = 1; i < argc; i++) {
-        printf("%s\n", argv[i]);
         if (strcmp(argv[i], "-d") == 0) {
             int w, h;
             string_to_int(&w, argv[i+1]);
             string_to_int(&h, argv[i+2]);
-            printf("%d %d\n", w, h);
             DIMS[0] = w;
             DIMS[1] = h;
             i += 2;
         }
+
+        if (strcmp(argv[i], "-w") == 0) {
+            int w, h;
+            string_to_int(&w, argv[i+1]);
+            string_to_int(&h, argv[i+2]);
+            WINDOW_DIMS[0] = w;
+            WINDOW_DIMS[1] = h;
+            i += 2;
+        }
+
+        if (strcmp(argv[i], "-p") == 0) {
+            palette_count = 0;
+            i++;
+
+            int d;
+            while (i < argc && (strlen(argv[i]) == 7 || strlen(argv[i]) == 9)) {
+                long number = (long)strtol(argv[i], NULL, 16);
+                int start;
+                unsigned char r, g, b, a;
+
+                if (strlen(argv[i]) == 7) {
+                    start = 16;
+                    a = 255;
+                } else if (strlen(argv[i]) == 9) {
+                    start = 24;
+                    a = number >> (start - 24) & 0xff;
+                } else {
+                    puts("Invalid colour in palette, "
+                         "check the length is 6 or 8");
+                }
+
+                r = number >> start & 0xff;
+                g = number >> (start - 8) & 0xff;
+                b = number >> (start - 16) & 0xff;
+
+                palette[palette_count + 1][0] = r;
+                palette[palette_count + 1][1] = g;
+                palette[palette_count + 1][2] = b;
+                palette[palette_count + 1][3] = a;
+
+                palette_count++;
+                i++;
+	    }
+	}
     }
 
     canvas_data = (unsigned char*)malloc(DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char));
@@ -498,9 +534,6 @@ string_to_int(int *out, char *s) {
 int
 colour_equal(unsigned char* a, unsigned char* b)
 {
-  printf("Checking colours: %d %d %d %d vs %d %d %d %d\n",
-         *a, *(a+1), *(a+2), *(a+3),
-         *b, *(b+1), *(b+2), *(b+3));
   if (
       *(a+0) == *(b+0) &&
       *(a+1) == *(b+1) &&
@@ -527,7 +560,6 @@ fill(int x, int y, unsigned char *old_colour)
         *(ptr + 1) = draw_colour[1];
         *(ptr + 2) = draw_colour[2];
         *(ptr + 3) = draw_colour[3];
-        printf(">%d %d\n", x, y);
 
         if (x != 0 && !colour_equal(get_pixel(x - 1, y), draw_colour))
           fill(x - 1, y, old_colour);
