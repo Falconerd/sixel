@@ -432,12 +432,22 @@ key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 
-    if (key == GLFW_KEY_J && action == GLFW_PRESS) {
-        if (palette_index > 1)
+    if (key == GLFW_KEY_H && action == GLFW_PRESS) {
+        if (palette_index > palette_count)
             palette_index--;
     }
 
-    if (key == GLFW_KEY_K && action == GLFW_PRESS)
+    if (key == GLFW_KEY_J && action == GLFW_PRESS) {
+        if (palette_index > palette_count + 8)
+            palette_index += 8;
+    }
+
+    if (key == GLFW_KEY_K && action == GLFW_PRESS) {
+        if (palette_index < palette_count - 8)
+            palette_index -= 8;
+    }
+
+    if (key == GLFW_KEY_L && action == GLFW_PRESS)
         if (palette_index < palette_count - 1)
             palette_index++;
 
