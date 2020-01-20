@@ -7,9 +7,9 @@ You must edit main.c and recompile to config.
 - Palette (edit main.c)
     - Change colour (1-9)
     - J and K also go up and down the palette
-- Size (edit main.c)
+- Size (edit main.c, or use `-d width height`)
 - Draw Pixel (left click)
-- Erase Pixel (mouse 3 to switch mode, or 0 to go to eraser)
+- Erase Pixel (E or 0 to enter Erase mode)
 - Zoom (scroll wheel)
 - Pan (hold left click)
 - Save (s)
