@@ -1,8 +1,8 @@
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 
 /* clang-format off */
 #include <glad/glad.h>
@@ -16,42 +16,41 @@
 #include "math_linear.h"
 
 char *FILE_NAME = "test.png";
-int WINDOW_DIMS[2] = { 512, 512 };
-int DIMS[2] = { 16, 16 };
+int WINDOW_DIMS[2] = {512, 512};
+int DIMS[2] = {16, 16};
 
 unsigned char *canvas_data;
 
 unsigned char palette_index = 1;
 unsigned char palette_count = 16;
-unsigned char palette[128][4] = {
-    {0, 0, 0, 0},
-    {0, 0, 0, 255},
-    {29, 43, 83, 255},
-    {126, 37, 83, 255},
-    {0, 135, 81, 255},
-    {171, 82, 54, 255},
-    {95, 87, 79, 255},
-    {194, 195, 199, 255},
-    {255, 241, 232, 255},
-    {255, 0, 77, 255},
-    {255, 163, 0, 255},
-    {255, 236, 39, 255},
-    {0, 228, 54, 255},
-    {41, 173, 255, 255},
-    {131, 118, 156, 255},
-    {255, 119, 168, 255},
-    {255, 204, 170, 255}
-};
+unsigned char palette[128][4] = {{0, 0, 0, 0},
+                                 {0, 0, 0, 255},
+                                 {29, 43, 83, 255},
+                                 {126, 37, 83, 255},
+                                 {0, 135, 81, 255},
+                                 {171, 82, 54, 255},
+                                 {95, 87, 79, 255},
+                                 {194, 195, 199, 255},
+                                 {255, 241, 232, 255},
+                                 {255, 0, 77, 255},
+                                 {255, 163, 0, 255},
+                                 {255, 236, 39, 255},
+                                 {0, 228, 54, 255},
+                                 {41, 173, 255, 255},
+                                 {131, 118, 156, 255},
+                                 {255, 119, 168, 255},
+                                 {255, 204, 170, 255}};
 
 enum mode { DRAW, PAN, FILL };
 
 unsigned char zoom_level = 0;
 unsigned char zoom[6] = {1, 2, 4, 8, 16, 32};
 
+unsigned char ctrl = 0;
 enum mode mode = DRAW;
 enum mode last_mode = DRAW;
 unsigned char *draw_colour;
-unsigned char erase[4] = { 0, 0, 0, 0 };
+unsigned char erase[4] = {0, 0, 0, 0};
 unsigned char should_save = 0;
 
 GLfloat viewport[4];
@@ -98,7 +97,7 @@ int
 string_to_int(int *out, char *s);
 
 int
-colour_equal(unsigned char*, unsigned char*);
+colour_equal(unsigned char *, unsigned char *);
 
 void
 fill(int x, int y, unsigned char *old_colour);
@@ -110,22 +109,22 @@ main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-d") == 0) {
             int w, h;
-            string_to_int(&w, argv[i+1]);
-            string_to_int(&h, argv[i+2]);
+            string_to_int(&w, argv[i + 1]);
+            string_to_int(&h, argv[i + 2]);
             DIMS[0] = w;
             DIMS[1] = h;
             i += 2;
         }
 
         if (strcmp(argv[i], "-o") == 0) {
-            FILE_NAME = argv[i+1];
+            FILE_NAME = argv[i + 1];
             i++;
         }
 
         if (strcmp(argv[i], "-w") == 0) {
             int w, h;
-            string_to_int(&w, argv[i+1]);
-            string_to_int(&h, argv[i+2]);
+            string_to_int(&w, argv[i + 1]);
+            string_to_int(&h, argv[i + 2]);
             WINDOW_DIMS[0] = w;
             WINDOW_DIMS[1] = h;
             i += 2;
@@ -163,14 +162,15 @@ main(int argc, char **argv)
 
                 palette_count++;
                 i++;
-	    }
-	}
+            }
+        }
     }
 
-    canvas_data = (unsigned char*)malloc(DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char));
+    canvas_data =
+        (unsigned char *)malloc(DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char));
 
     GLFWwindow *window;
-    GLFWcursor* cursor = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
+    GLFWcursor *cursor = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
 
     draw_colour = palette[palette_index];
 
@@ -181,8 +181,12 @@ main(int argc, char **argv)
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_CENTER_CURSOR, GLFW_TRUE);
 
-    window =
-        glfwCreateWindow(WINDOW_DIMS[0], WINDOW_DIMS[1], "pixel-tool", NULL, NULL);
+    window = glfwCreateWindow(
+        WINDOW_DIMS[0],
+        WINDOW_DIMS[1],
+        "pixel-tool",
+        NULL,
+        NULL);
 
     if (!window)
         puts("Failed to create GLFW window");
@@ -361,8 +365,7 @@ process_input(GLFWwindow *window)
                 break;
             case PAN:
                 break;
-            case FILL:
-                {
+            case FILL: {
                 unsigned char colour[4] = {*(ptr + 0),
                                            *(ptr + 1),
                                            *(ptr + 2),
@@ -371,12 +374,11 @@ process_input(GLFWwindow *window)
                 fill(x, y, colour);
 
                 break;
-                }
+            }
             }
         }
     }
 }
-
 
 void
 mouse_callback(GLFWwindow *window, double x, double y)
@@ -403,10 +405,8 @@ mouse_callback(GLFWwindow *window, double x, double y)
 void
 mouse_button_callback(GLFWwindow *window, int button, int down, int c)
 {
-
     /* if (button == GLFW_MOUSE_BUTTON_3 && down == GLFW_TRUE) */
     /*     draw_mode = -draw_mode; */
-
 }
 
 void
@@ -421,6 +421,14 @@ scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 void
 key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
+    if (mods == GLFW_MOD_SHIFT && action == GLFW_PRESS) {
+        ctrl = 1;
+    }
+
+    if (mods == GLFW_MOD_SHIFT && action == GLFW_RELEASE) {
+        ctrl = 0;
+    }
+
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 
@@ -433,41 +441,70 @@ key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
         if (palette_index < palette_count - 1)
             palette_index++;
 
-    if (key == GLFW_KEY_1 && action == GLFW_PRESS)
-        if (palette_count >= 1)
-            palette_index = 1;
+    if (key == GLFW_KEY_1 && action == GLFW_PRESS) {
+        if (palette_count >= 1) {
+            if (ctrl)
+                palette_index = 9;
+            else
+                palette_index = 1;
+        }
+    }
 
     if (key == GLFW_KEY_2 && action == GLFW_PRESS)
-        if (palette_count >= 2)
-            palette_index = 2;
+        if (palette_count >= 2) {
+            if (ctrl)
+                palette_index = 10;
+            else
+                palette_index = 2;
+        }
 
     if (key == GLFW_KEY_3 && action == GLFW_PRESS)
-        if (palette_count >= 3)
-            palette_index = 3;
+        if (palette_count >= 3) {
+            if (ctrl)
+                palette_index = 11;
+            else
+                palette_index = 3;
+        }
 
     if (key == GLFW_KEY_4 && action == GLFW_PRESS)
-        if (palette_count >= 4)
-            palette_index = 4;
+        if (palette_count >= 4) {
+            if (ctrl)
+                palette_index = 12;
+            else
+                palette_index = 4;
+        }
 
     if (key == GLFW_KEY_5 && action == GLFW_PRESS)
-        if (palette_count >= 5)
-            palette_index = 5;
+        if (palette_count >= 5) {
+            if (ctrl)
+                palette_index = 13;
+            else
+                palette_index = 5;
+        }
 
     if (key == GLFW_KEY_6 && action == GLFW_PRESS)
-        if (palette_count >= 6)
-            palette_index = 6;
+        if (palette_count >= 6) {
+            if (ctrl)
+                palette_index = 14;
+            else
+                palette_index = 6;
+        }
 
     if (key == GLFW_KEY_7 && action == GLFW_PRESS)
-        if (palette_count >= 7)
-            palette_index = 7;
+        if (palette_count >= 7) {
+            if (ctrl)
+                palette_index = 15;
+            else
+                palette_index = 7;
+        }
 
     if (key == GLFW_KEY_8 && action == GLFW_PRESS)
-        if (palette_count >= 8)
-            palette_index = 8;
-
-    if (key == GLFW_KEY_9 && action == GLFW_PRESS)
-        if (palette_count >= 9)
-            palette_index = 9;
+        if (palette_count >= 8) {
+            if (ctrl)
+                palette_index = 16;
+            else
+                palette_index = 8;
+        }
 
     if (key == GLFW_KEY_F && action == GLFW_PRESS)
         mode = FILL;
@@ -485,7 +522,7 @@ key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
     }
 
     if ((key == GLFW_KEY_0 || key == GLFW_KEY_E) && action == GLFW_PRESS) {
-      palette_index = 0;
+        palette_index = 0;
     }
 
     draw_colour = palette[palette_index];
@@ -521,7 +558,8 @@ adjust_zoom(int increase)
 }
 
 int
-string_to_int(int *out, char *s) {
+string_to_int(int *out, char *s)
+{
     char *end;
     if (s[0] == '\0')
         return -1;
@@ -537,42 +575,38 @@ string_to_int(int *out, char *s) {
 }
 
 int
-colour_equal(unsigned char* a, unsigned char* b)
+colour_equal(unsigned char *a, unsigned char *b)
 {
-  if (
-      *(a+0) == *(b+0) &&
-      *(a+1) == *(b+1) &&
-      *(a+2) == *(b+2) &&
-      *(a+3) == *(b+3)) {
-    return 1;
-  }
-  return 0;
+    if (*(a + 0) == *(b + 0) && *(a + 1) == *(b + 1) && *(a + 2) == *(b + 2) &&
+        *(a + 3) == *(b + 3)) {
+        return 1;
+    }
+    return 0;
 }
 
-unsigned char*
+unsigned char *
 get_pixel(int x, int y)
 {
-    return canvas_data + ((y * DIMS[0] + x) * 4);   
+    return canvas_data + ((y * DIMS[0] + x) * 4);
 }
 
 void
 fill(int x, int y, unsigned char *old_colour)
 {
     unsigned char *ptr = get_pixel(x, y);
-    if (colour_equal(ptr, old_colour))
-    {
+    if (colour_equal(ptr, old_colour)) {
         *ptr = draw_colour[0];
         *(ptr + 1) = draw_colour[1];
         *(ptr + 2) = draw_colour[2];
         *(ptr + 3) = draw_colour[3];
 
         if (x != 0 && !colour_equal(get_pixel(x - 1, y), draw_colour))
-          fill(x - 1, y, old_colour);
+            fill(x - 1, y, old_colour);
         if (x != DIMS[0] - 1 && !colour_equal(get_pixel(x + 1, y), draw_colour))
-          fill(x + 1, y, old_colour);
+            fill(x + 1, y, old_colour);
         if (y != DIMS[1] - 1 && !colour_equal(get_pixel(x, y + 1), draw_colour))
-          fill(x, y + 1, old_colour);
+            fill(x, y + 1, old_colour);
         if (y != 0 && !colour_equal(get_pixel(x, y - 1), draw_colour))
-          fill(x, y - 1, old_colour);
+            fill(x, y - 1, old_colour);
     }
 }
