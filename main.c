@@ -433,7 +433,7 @@ key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 
     if (key == GLFW_KEY_H && action == GLFW_PRESS) {
-        if (palette_index > palette_count)
+        if (palette_index > 1)
             palette_index--;
     }
 
@@ -448,7 +448,7 @@ key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
     }
 
     if (key == GLFW_KEY_L && action == GLFW_PRESS)
-        if (palette_index < palette_count - 1)
+        if (palette_index < palette_count)
             palette_index++;
 
     if (key == GLFW_KEY_1 && action == GLFW_PRESS) {
