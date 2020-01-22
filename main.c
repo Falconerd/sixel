@@ -176,20 +176,25 @@ main(int argc, char **argv)
             i++;
 
             int d;
-            while (i < argc && (strlen(argv[i]) == 7 || strlen(argv[i]) == 9)) {
+            while (i < argc && (strlen(argv[i]) == 6 || strlen(argv[i]) == 8)) {
+                puts("yey");
                 long number = (long)strtol(argv[i], NULL, 16);
                 int start;
                 unsigned char r, g, b, a;
 
-                if (strlen(argv[i]) == 7) {
+                if (strlen(argv[i]) == 6) {
                     start = 16;
                     a = 255;
-                } else if (strlen(argv[i]) == 9) {
+                } else if (strlen(argv[i]) == 8) {
                     start = 24;
                     a = number >> (start - 24) & 0xff;
                 } else {
                     puts("Invalid colour in palette, "
-                         "check the length is 6 or 8");
+                         "check the length is 6 or 8."
+                         " Make sure to convert to LF"
+                         " line endings if this file "
+                         "came from the web or a "
+                         "Windows PC");
                 }
 
                 r = number >> start & 0xff;
@@ -200,6 +205,8 @@ main(int argc, char **argv)
                 palette[palette_count + 1][1] = g;
                 palette[palette_count + 1][2] = b;
                 palette[palette_count + 1][3] = a;
+
+                printf("Adding colour %d %d %d\n", r, g, b);
 
                 palette_count++;
                 i++;
