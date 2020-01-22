@@ -12,6 +12,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include "shader.h"
 #include "math_linear.h"
 
@@ -99,14 +102,52 @@ string_to_int(int *out, char *s);
 int
 colour_equal(unsigned char *, unsigned char *);
 
+unsigned char *
+get_pixel(int x, int y);
+
 void
 fill(int x, int y, unsigned char *old_colour);
+
+unsigned char *
+get_char_data(unsigned char *data, int x, int y)
+{
+    return data + ((y * DIMS[0] + x) * 4);
+}
 
 int
 main(int argc, char **argv)
 {
     unsigned char i;
     for (i = 1; i < argc; i++) {
+      if (strcmp(argv[i], "-f") == 0) {
+        FILE_NAME = argv[i+1];
+        int x, y, c;
+        unsigned char *image_data = stbi_load(FILE_NAME, &x, &y, &c, 0);
+        if (image_data == NULL) {
+          printf("Unable to load image %s\n", FILE_NAME);
+        } else {
+          DIMS[0] = x;
+          DIMS[1] = y;
+            canvas_data =
+              (unsigned char *)malloc(DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char));
+            int j, k;
+            unsigned char *ptr;
+            unsigned char *iptr;
+            for (j = 0; j < y; j++) {
+              for (k = 0; k < x; k++) {
+                ptr = get_pixel(k, j);
+                iptr = get_char_data(image_data, k, j);
+                *(ptr+0) = *(iptr+0);
+                *(ptr+1) = *(iptr+1);
+                *(ptr+2) = *(iptr+2);
+                *(ptr+3) = *(iptr+3);
+              }
+            }
+            stbi_image_free(image_data);
+        }
+        i++;
+      }
+
         if (strcmp(argv[i], "-d") == 0) {
             int w, h;
             string_to_int(&w, argv[i + 1]);
@@ -166,8 +207,9 @@ main(int argc, char **argv)
         }
     }
 
-    canvas_data =
-        (unsigned char *)malloc(DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char));
+    if (canvas_data == NULL)
+        canvas_data =
+            (unsigned char *)malloc(DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char));
 
     GLFWwindow *window;
     GLFWcursor *cursor = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
@@ -315,11 +357,6 @@ main(int argc, char **argv)
         if (should_save > 0) {
             unsigned char *data = (unsigned char *)malloc(
                 DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char));
-
-            printf(
-                "allocated %lu. stride: %lu\n",
-                DIMS[0] * DIMS[1] * 4 * sizeof(unsigned char),
-                sizeof(unsigned char) * 4);
 
             /* glPixelStorei(GL_UNPACK_ALIGNMENT, 1); */
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);

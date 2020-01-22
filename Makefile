@@ -6,4 +6,4 @@ STD := c89
 TARGETS := app
 
 install: main.c glad.c
-	mkdir -p dist && ${CC} ${CFLAGS} -std=${STD} -o sixel $+
+	${CC} ${CFLAGS} -std=${STD} -o sixel $+
